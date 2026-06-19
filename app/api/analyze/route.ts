@@ -1,35 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeKlines, Kline } from "../../lib/analysis";
 
-function toCC(symbol: string) {
-  return symbol.replace(/USDT$/, "");
+// OKX: BTCUSDT → BTC-USDT, interval: 1h → 1H, 4h → 4H, 1d → 1D, 15m → 15m
+function toOKX(symbol: string) {
+  const base = symbol.replace("USDT", "");
+  return `${base}-USDT`;
 }
-
-function ccEndpoint(interval: string): { ep: string; agg: number } {
-  if (interval === "1d")  return { ep: "histoday",    agg: 1  };
-  if (interval === "4h")  return { ep: "histohour",   agg: 4  };
-  if (interval === "15m") return { ep: "histominute", agg: 15 };
-  return { ep: "histohour", agg: 1 };
+function toOKXBar(interval: string) {
+  if (interval === "1h")  return "1H";
+  if (interval === "4h")  return "4H";
+  if (interval === "1d")  return "1D";
+  if (interval === "15m") return "15m";
+  return "1H";
 }
 
 async function fetchKlines(symbol: string, interval: string, limit: number): Promise<Kline[]> {
-  const fsym = toCC(symbol);
-  const { ep, agg } = ccEndpoint(interval);
-  const url = `https://min-api.cryptocompare.com/data/v2/${ep}?fsym=${fsym}&tsym=USD&limit=${limit}&aggregate=${agg}`;
+  const instId = toOKX(symbol);
+  const bar    = toOKXBar(interval);
+  const url    = `https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=${limit}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
-
   try {
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timer);
-    if (!res.ok) throw new Error(`CC HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`OKX HTTP ${res.status}`);
     const json = await res.json();
-    if (json.Response !== "Success") throw new Error(json.Message || "CC error");
+    if (json.code !== "0") throw new Error(`OKX error: ${json.msg}`);
+    // OKX: [ts, o, h, l, c, vol, ...]  — newest first, so reverse
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return json.Data.Data.map((k: any): Kline => ({
-      time: k.time * 1000, open: k.open, high: k.high,
-      low: k.low, close: k.close, volume: k.volumefrom,
+    return (json.data as any[]).reverse().map(k => ({
+      time:   parseInt(k[0]),
+      open:   parseFloat(k[1]),
+      high:   parseFloat(k[2]),
+      low:    parseFloat(k[3]),
+      close:  parseFloat(k[4]),
+      volume: parseFloat(k[5]),
     }));
   } finally {
     clearTimeout(timer);
