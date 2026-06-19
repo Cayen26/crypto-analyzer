@@ -1,34 +1,7 @@
 "use client";
+import { AnalysisResult } from "../lib/analysis";
 
-interface TradePlan {
-  entry: number;
-  sl: number;
-  tp1: number;
-  tp2: number;
-  tp3: number;
-  riskPct: number;
-  rewardPct1: number;
-  rewardPct2: number;
-  rewardPct3: number;
-  rr1: number;
-}
-
-interface AnalysisData {
-  symbol: string;
-  price: number;
-  change24h: number;
-  rsi: number;
-  macd: { macd: number; signal: number; histogram: number };
-  bollinger: { upper: number; middle: number; lower: number };
-  support: number;
-  tradePlan: TradePlan | null;
-  resistance: number;
-  volume: number;
-  volumeRatio: number;
-  trend: string;
-  recommendation: { signal: "AL" | "SAT" | "BEKLE"; strength: number; reasons: string[] };
-  updatedAt: string;
-}
+type AnalysisData = AnalysisResult;
 
 interface Props {
   data: AnalysisData | null;
@@ -132,7 +105,7 @@ export default function AnalysisPanel({ data, loading, error }: Props) {
 
   if (!data) return null;
 
-  const { recommendation, rsi, macd, bollinger, support, resistance, volumeRatio, trend, price, change24h, tradePlan } = data;
+  const { recommendation, rsi, macd, bollinger, support, resistance, volumeRatio, trend, price, change24h, tradePlan } = { ...data, volumeRatio: data.volumeRatio };
 
   const formatPrice = (n: number) =>
     n > 1000 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : `$${n.toFixed(4)}`;
@@ -268,7 +241,7 @@ export default function AnalysisPanel({ data, loading, error }: Props) {
             </div>
             <div style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 8, padding: "8px 10px" }}>
               <div style={{ fontSize: 10, color: "#8899aa", marginBottom: 2 }}>R/R Oranı</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#10b981" }}>1 : {tradePlan.rr1}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#10b981" }}>1 : {tradePlan.rr}</div>
             </div>
           </div>
 

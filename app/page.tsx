@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import AnalysisPanel from "./components/AnalysisPanel";
+import { fetchKlines, analyzeKlines, AnalysisResult } from "./lib/analysis";
 
 const TradingViewWidget = dynamic(() => import("./components/TradingViewWidget"), { ssr: false });
 
@@ -24,26 +25,10 @@ const INTERVALS = [
   { label: "1G", value: "1d" },
 ];
 
-type TradePlan = {
-  entry: number; sl: number; tp1: number; tp2: number; tp3: number;
-  riskPct: number; rewardPct1: number; rewardPct2: number; rewardPct3: number; rr1: number;
-};
-
-type AnalysisData = {
-  symbol: string; price: number; change24h: number; rsi: number;
-  macd: { macd: number; signal: number; histogram: number };
-  bollinger: { upper: number; middle: number; lower: number };
-  support: number; resistance: number; volume: number; volumeRatio: number;
-  trend: string;
-  recommendation: { signal: "AL" | "SAT" | "BEKLE"; strength: number; reasons: string[] };
-  tradePlan: TradePlan | null;
-  updatedAt: string;
-};
-
 export default function Home() {
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [interval, setInterval] = useState("1h");
-  const [data, setData] = useState<AnalysisData | null>(null);
+  const [data, setData] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -52,11 +37,11 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}`);
-      if (!res.ok) throw new Error(`API hatası: ${res.status}`);
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setData(json);
+      const [klines, klines1d] = await Promise.all([
+        fetchKlines(symbol, interval, 100),
+        fetchKlines(symbol, "1d", 30),
+      ]);
+      setData(analyzeKlines(symbol, klines, klines1d));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -64,9 +49,7 @@ export default function Home() {
     }
   }, [symbol, interval]);
 
-  useEffect(() => {
-    fetchAnalysis();
-  }, [fetchAnalysis]);
+  useEffect(() => { fetchAnalysis(); }, [fetchAnalysis]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -78,34 +61,23 @@ export default function Home() {
     : data?.recommendation.signal === "SAT" ? "#ef4444" : "#f59e0b";
 
   const formatPrice = (n: number) =>
-    n > 1000
-      ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-      : `$${n.toFixed(4)}`;
+    n > 1000 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : `$${n.toFixed(4)}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0a0e1a" }}>
-      {/* Header */}
       <header style={{
         display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
         padding: "0 16px", height: 52,
-        background: "#0f1623", borderBottom: "1px solid #1e2d40",
-        flexShrink: 0,
+        background: "#0f1623", borderBottom: "1px solid #1e2d40", flexShrink: 0,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: 7,
-            background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 13, fontWeight: 800, color: "#fff",
-          }}>C</div>
+          <div style={{ width: 26, height: 26, borderRadius: 7, background: "linear-gradient(135deg,#3b82f6,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "#fff" }}>C</div>
           <span style={{ fontWeight: 700, fontSize: 14, color: "#e2e8f0" }}>CryptoAnalyzer</span>
         </div>
-
         <div style={{ width: 1, height: 24, background: "#1e2d40" }} />
 
-        {/* Symbol Selector */}
         <div style={{ display: "flex", gap: 3 }}>
-          {SYMBOLS.map((s) => (
+          {SYMBOLS.map(s => (
             <button key={s.value} onClick={() => setSymbol(s.value)} style={{
               padding: "3px 9px", borderRadius: 5, border: "none", cursor: "pointer",
               fontSize: 11, fontWeight: 600,
@@ -114,12 +86,10 @@ export default function Home() {
             }}>{s.label}</button>
           ))}
         </div>
-
         <div style={{ width: 1, height: 24, background: "#1e2d40" }} />
 
-        {/* Interval */}
         <div style={{ display: "flex", gap: 3 }}>
-          {INTERVALS.map((iv) => (
+          {INTERVALS.map(iv => (
             <button key={iv.value} onClick={() => setInterval(iv.value)} style={{
               padding: "3px 9px", borderRadius: 5, border: "none", cursor: "pointer",
               fontSize: 11, fontWeight: 600,
@@ -144,25 +114,22 @@ export default function Home() {
                   {data.change24h >= 0 ? "+" : ""}{data.change24h.toFixed(2)}%
                 </div>
               </div>
-              <div style={{
-                padding: "3px 10px", borderRadius: 5, fontSize: 11, fontWeight: 700,
-                background: `${signalColor}22`, color: signalColor, border: `1px solid ${signalColor}44`,
-              }}>{data.recommendation.signal}</div>
+              <div style={{ padding: "3px 10px", borderRadius: 5, fontSize: 11, fontWeight: 700, background: `${signalColor}22`, color: signalColor, border: `1px solid ${signalColor}44` }}>
+                {data.recommendation.signal}
+              </div>
             </>
           )}
           <button onClick={fetchAnalysis} disabled={loading} style={{
             padding: "5px 12px", borderRadius: 6, border: "none", cursor: "pointer",
-            background: "#3b82f6", color: "#fff", fontSize: 11, fontWeight: 600,
-            opacity: loading ? 0.6 : 1,
+            background: "#3b82f6", color: "#fff", fontSize: 11, fontWeight: 600, opacity: loading ? 0.6 : 1,
           }}>{loading ? "..." : "↻ Yenile"}</button>
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#8899aa", cursor: "pointer" }}>
-            <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} style={{ accentColor: "#3b82f6" }} />
+            <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} style={{ accentColor: "#3b82f6" }} />
             Oto
           </label>
         </div>
       </header>
 
-      {/* Main */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <TradingViewWidget symbol={symbol} interval={interval} />
