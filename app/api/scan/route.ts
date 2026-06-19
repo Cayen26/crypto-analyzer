@@ -1,32 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scoredScanAnalysis } from "../../lib/analysis";
-
-type RawKline = [number, string, string, string, string, string, ...unknown[]];
+import { scoredScanAnalysis, Kline } from "../../lib/analysis";
 
 const SCAN_SYMBOLS = [
   "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","AVAXUSDT","DOGEUSDT",
   "DOTUSDT","MATICUSDT","LINKUSDT","UNIUSDT","LTCUSDT","ATOMUSDT","ETCUSDT","XLMUSDT",
-  "ALGOUSDT","NEARUSDT","FTMUSDT","SANDUSDT","MANAUSDT","AXSUSDT","CRVUSDT","AAVEUSDT",
-  "RUNEUSDT","KAVAUSDT","VETUSDT","HBARUSDT","EGLDUSDT","ICPUSDT","FILUSDT","FLOWUSDT",
-  "THETAUSDT","XTZUSDT","BCHUSDT","TRXUSDT","ENJUSDT","CHZUSDT","GALAUSDT","APEUSDT",
-  "LDOUSDT","OPUSDT","ARBUSDT","GMXUSDT","DYDXUSDT","IMXUSDT","RNDRUSDT","AGIXUSDT",
-  "FETUSDT","WOOUSDT","SUIUSDT","APTUSDT","INJUSDT","SEIUSDT","TIAUSDT","WLDUSDT",
-  "MAGICUSDT","PENDLEUSDT","ARKMUSDT","ORDIUSDT","JUPUSDT","DYMUSDT","STRKUSDT",
-  "ENAUSDT","TAOUSDT","NOTUSDT","ZKUSDT","BOMEUSDT","MEWUSDT","POPCATUSDT","EIGENUSDT",
-  "GOATUSDT","MOODENGUSDT","PNUTUSDT",
+  "ALGOUSDT","NEARUSDT","SANDUSDT","MANAUSDT","AXSUSDT","CRVUSDT","AAVEUSDT",
+  "RUNEUSDT","VETUSDT","HBARUSDT","EGLDUSDT","ICPUSDT","FILUSDT","THETAUSDT",
+  "XTZUSDT","BCHUSDT","TRXUSDT","CHZUSDT","GALAUSDT","APEUSDT",
+  "LDOUSDT","OPUSDT","ARBUSDT","GMXUSDT","DYDXUSDT","IMXUSDT","RNDRUSDT","FETUSDT",
+  "SUIUSDT","APTUSDT","INJUSDT","SEIUSDT","TIAUSDT","PENDLEUSDT","ORDIUSDT",
+  "JUPUSDT","ENAUSDT","TAOUSDT","NOTUSDT","EIGENUSDT","GOATUSDT","PNUTUSDT",
 ];
 
-async function fetchKlines(symbol: string, interval: string, limit: number) {
+function toCC(symbol: string) { return symbol.replace(/USDT$/, ""); }
+
+function ccEndpoint(interval: string): { ep: string; agg: number } {
+  if (interval === "1d")  return { ep: "histoday",    agg: 1  };
+  if (interval === "4h")  return { ep: "histohour",   agg: 4  };
+  if (interval === "15m") return { ep: "histominute", agg: 15 };
+  return { ep: "histohour", agg: 1 };
+}
+
+async function fetchKlines(symbol: string, interval: string): Promise<Kline[] | null> {
   try {
-    const res = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
-      { signal: AbortSignal.timeout(5000) }
-    );
+    const fsym = toCC(symbol);
+    const { ep, agg } = ccEndpoint(interval);
+    const url = `https://min-api.cryptocompare.com/data/v2/${ep}?fsym=${fsym}&tsym=USD&limit=100&aggregate=${agg}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!res.ok) return null;
-    const raw: RawKline[] = await res.json();
-    return raw.map(k => ({
-      time: k[0], open: parseFloat(k[1]), high: parseFloat(k[2]),
-      low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]),
+    const json = await res.json();
+    if (json.Response !== "Success") return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return json.Data.Data.map((k: any) => ({
+      time: k.time * 1000, open: k.open, high: k.high,
+      low: k.low, close: k.close, volume: k.volumefrom,
     }));
   } catch { return null; }
 }
@@ -37,20 +44,20 @@ export async function GET(request: NextRequest) {
   const filter   = searchParams.get("filter")   || "all";
 
   const results = [];
-  const BATCH = 10;
+  const BATCH = 8;
   for (let i = 0; i < SCAN_SYMBOLS.length; i += BATCH) {
     const batch = await Promise.all(
       SCAN_SYMBOLS.slice(i, i + BATCH).map(async sym => {
-        const k = await fetchKlines(sym, interval, 100);
+        const k = await fetchKlines(sym, interval);
         return k ? scoredScanAnalysis(sym, k) : null;
       })
     );
     results.push(...batch.filter(Boolean));
   }
 
-  const filtered = results
-    .filter(r => filter === "all" || r!.signal === filter)
-    .sort((a, b) => b!.strength - a!.strength);
+  const filtered = (results as NonNullable<ReturnType<typeof scoredScanAnalysis>>[])
+    .filter(r => filter === "all" || r.signal === filter)
+    .sort((a, b) => b.strength - a.strength);
 
   return NextResponse.json({
     scannedAt: new Date().toISOString(),
