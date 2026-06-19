@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import AnalysisPanel from "./components/AnalysisPanel";
-import { fetchKlines, analyzeKlines, AnalysisResult } from "./lib/analysis";
+import { AnalysisResult } from "./lib/analysis";
 
 const TradingViewWidget = dynamic(() => import("./components/TradingViewWidget"), { ssr: false });
 
@@ -37,11 +37,11 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const [klines, klines1d] = await Promise.all([
-        fetchKlines(symbol, interval, 100),
-        fetchKlines(symbol, "1d", 30),
-      ]);
-      setData(analyzeKlines(symbol, klines, klines1d));
+      const res = await fetch(`/api/analyze?symbol=${symbol}&interval=${interval}`);
+      if (!res.ok) throw new Error(`API hatası: ${res.status}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setData(json);
     } catch (e) {
       setError(String(e));
     } finally {

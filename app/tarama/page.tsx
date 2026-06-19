@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { fetchKlines, scoredScanAnalysis, ScanItem } from "../lib/analysis";
+import { ScanItem } from "../lib/analysis";
 
 type ScanResult = ScanItem;
 
@@ -200,50 +200,21 @@ export default function TaramaPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [minStrength, setMinStrength] = useState(40);
 
-  const SCAN_SYMBOLS = [
-    "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","AVAXUSDT","DOGEUSDT",
-    "DOTUSDT","MATICUSDT","LINKUSDT","UNIUSDT","LTCUSDT","ATOMUSDT","ETCUSDT","XLMUSDT",
-    "ALGOUSDT","NEARUSDT","FTMUSDT","SANDUSDT","MANAUSDT","AXSUSDT","CRVUSDT","AAVEUSDT",
-    "RUNEUSDT","KAVAUSDT","VETUSDT","HBARUSDT","EGLDUSDT","ICPUSDT","FILUSDT","FLOWUSDT",
-    "THETAUSDT","XTZUSDT","BCHUSDT","TRXUSDT","ENJUSDT","CHZUSDT","GALAUSDT","APEUSDT",
-    "LDOUSDT","OPUSDT","ARBUSDT","GMXUSDT","DYDXUSDT","IMXUSDT","RNDRUSDT","AGIXUSDT",
-    "FETUSDT","WOOUSDT","SUIUSDT","APTUSDT","INJUSDT","SEIUSDT","TIAUSDT","WLDUSDT",
-    "MAGICUSDT","PENDLEUSDT","ARKMUSDT","ORDIUSDT","JUPUSDT","DYMUSDT","STRKUSDT",
-    "ENAUSDT","TAOUSDT","NOTUSDT","ZKUSDT","BOMEUSDT","MEWUSDT","POPCATUSDT","EIGENUSDT",
-    "GOATUSDT","MOODENGUSDT","PNUTUSDT",
-  ];
-
   const scan = useCallback(async () => {
     setLoading(true);
     setData(null);
     setProgress(0);
 
-    const results: ScanResult[] = [];
-    const BATCH = 8;
-    let done = 0;
-
-    for (let i = 0; i < SCAN_SYMBOLS.length; i += BATCH) {
-      const batch = SCAN_SYMBOLS.slice(i, i + BATCH);
-      const fetched = await Promise.all(
-        batch.map(async (sym) => {
-          try {
-            const klines = await fetchKlines(sym, interval, 100);
-            return scoredScanAnalysis(sym, klines);
-          } catch { return null; }
-        })
-      );
-      fetched.forEach(r => { if (r) results.push(r); });
-      done += batch.length;
-      setProgress(Math.round((done / SCAN_SYMBOLS.length) * 100));
+    const iv = window.setInterval(() => setProgress(p => Math.min(p + 3, 92)), 400);
+    try {
+      const res = await fetch(`/api/scan?interval=${interval}&filter=${filter}`);
+      const json = await res.json();
+      setData(json);
+      setProgress(100);
+    } finally {
+      window.clearInterval(iv);
+      setLoading(false);
     }
-
-    const filtered = results
-      .filter(r => filter === "all" || r.signal === filter)
-      .sort((a, b) => b.strength - a.strength);
-
-    setData({ scannedAt: new Date().toISOString(), total: SCAN_SYMBOLS.length, found: filtered.length, interval, results: filtered });
-    setLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interval, filter]);
 
   useEffect(() => { scan(); }, [scan]);
