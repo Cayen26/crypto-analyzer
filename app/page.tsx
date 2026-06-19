@@ -23,6 +23,11 @@ const INTERVALS = [
   { label: "1G", value: "1d" },
 ];
 
+type TradePlan = {
+  entry: number; sl: number; tp1: number; tp2: number; tp3: number;
+  riskPct: number; rewardPct1: number; rewardPct2: number; rewardPct3: number; rr1: number;
+};
+
 type AnalysisData = {
   symbol: string; price: number; change24h: number; rsi: number;
   macd: { macd: number; signal: number; histogram: number };
@@ -30,6 +35,7 @@ type AnalysisData = {
   support: number; resistance: number; volume: number; volumeRatio: number;
   trend: string;
   recommendation: { signal: "AL" | "SAT" | "BEKLE"; strength: number; reasons: string[] };
+  tradePlan: TradePlan | null;
   updatedAt: string;
 };
 

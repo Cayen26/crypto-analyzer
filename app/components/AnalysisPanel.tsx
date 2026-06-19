@@ -1,5 +1,18 @@
 "use client";
 
+interface TradePlan {
+  entry: number;
+  sl: number;
+  tp1: number;
+  tp2: number;
+  tp3: number;
+  riskPct: number;
+  rewardPct1: number;
+  rewardPct2: number;
+  rewardPct3: number;
+  rr1: number;
+}
+
 interface AnalysisData {
   symbol: string;
   price: number;
@@ -8,6 +21,7 @@ interface AnalysisData {
   macd: { macd: number; signal: number; histogram: number };
   bollinger: { upper: number; middle: number; lower: number };
   support: number;
+  tradePlan: TradePlan | null;
   resistance: number;
   volume: number;
   volumeRatio: number;
@@ -118,7 +132,7 @@ export default function AnalysisPanel({ data, loading, error }: Props) {
 
   if (!data) return null;
 
-  const { recommendation, rsi, macd, bollinger, support, resistance, volumeRatio, trend, price, change24h } = data;
+  const { recommendation, rsi, macd, bollinger, support, resistance, volumeRatio, trend, price, change24h, tradePlan } = data;
 
   const formatPrice = (n: number) =>
     n > 1000 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : `$${n.toFixed(4)}`;
@@ -199,6 +213,74 @@ export default function AnalysisPanel({ data, loading, error }: Props) {
           <span style={{ fontSize: 13, fontWeight: 700, color: "#10b981", marginLeft: "auto" }}>{formatPrice(support)}</span>
         </div>
       </div>
+
+      {/* Trade Plan */}
+      {tradePlan ? (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: "#8899aa", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+            İşlem Planı
+          </div>
+
+          {/* Entry */}
+          <div style={{ background: "#111827", borderRadius: 10, padding: 12, marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <span style={{ fontSize: 11, color: "#8899aa" }}>GİRİŞ NOKTASI</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#3b82f6" }}>{formatPrice(tradePlan.entry)}</span>
+            </div>
+
+            {/* TP Seviyeleri */}
+            {[
+              { label: "TP 1", value: tradePlan.tp1, pct: tradePlan.rewardPct1, color: "#10b981", opacity: 1 },
+              { label: "TP 2", value: tradePlan.tp2, pct: tradePlan.rewardPct2, color: "#10b981", opacity: 0.7 },
+              { label: "TP 3", value: tradePlan.tp3, pct: tradePlan.rewardPct3, color: "#10b981", opacity: 0.5 },
+            ].map((tp) => (
+              <div key={tp.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 3, height: 14, borderRadius: 2, background: tp.color, opacity: tp.opacity }} />
+                  <span style={{ fontSize: 11, color: "#8899aa" }}>{tp.label}</span>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#10b981", opacity: tp.opacity }}>{formatPrice(tp.value)}</span>
+                  <span style={{ fontSize: 10, color: "#10b981", opacity: tp.opacity, marginLeft: 4 }}>+{tp.pct}%</span>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ borderTop: "1px solid #1e2d40", marginTop: 8, paddingTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 3, height: 14, borderRadius: 2, background: "#ef4444" }} />
+                  <span style={{ fontSize: 11, color: "#8899aa" }}>STOP LOSS</span>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#ef4444" }}>{formatPrice(tradePlan.sl)}</span>
+                  <span style={{ fontSize: 10, color: "#ef4444", marginLeft: 4 }}>-{tradePlan.riskPct}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Risk/Ödül */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ fontSize: 10, color: "#8899aa", marginBottom: 2 }}>Risk</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#ef4444" }}>%{tradePlan.riskPct}</div>
+            </div>
+            <div style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ fontSize: 10, color: "#8899aa", marginBottom: 2 }}>R/R Oranı</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#10b981" }}>1 : {tradePlan.rr1}</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 8, padding: "8px 10px", background: "#111827", borderRadius: 8, fontSize: 11, color: "#8899aa", lineHeight: 1.5 }}>
+            ⚠️ Bu bir yatırım tavsiyesi değildir. Kendi analizinizi yapın ve risk yönetiminizi uygulayın.
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 12, padding: "12px", background: "#111827", borderRadius: 10, textAlign: "center", fontSize: 12, color: "#8899aa" }}>
+          Sinyal yetersiz — işlem planı oluşturulamadı
+        </div>
+      )}
 
       <div style={{ fontSize: 10, color: "#4a5568", textAlign: "center" }}>
         Son güncelleme: {new Date(data.updatedAt).toLocaleTimeString("tr-TR")}

@@ -61,6 +61,63 @@ function findSupportResistance(highs: number[], lows: number[]) {
   };
 }
 
+function calcATR(highs: number[], lows: number[], closes: number[], period = 14): number {
+  const trs: number[] = [];
+  for (let i = 1; i < highs.length; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    ));
+  }
+  return trs.slice(-period).reduce((a, b) => a + b, 0) / period;
+}
+
+function calcTradePlan(
+  signal: "AL" | "SAT" | "BEKLE",
+  price: number,
+  atr: number,
+  support: number,
+  resistance: number,
+  bb: { upper: number; lower: number; middle: number }
+) {
+  if (signal === "BEKLE") return null;
+
+  const isLong = signal === "AL";
+
+  // Giriş: mevcut fiyat ± küçük ATR payı (limit order gibi)
+  const entry = isLong
+    ? parseFloat((price - atr * 0.1).toFixed(4))
+    : parseFloat((price + atr * 0.1).toFixed(4));
+
+  // SL: destek/direnç + 1 ATR tampon
+  const sl = isLong
+    ? parseFloat(Math.min(support - atr * 0.5, price - atr * 1.5).toFixed(4))
+    : parseFloat(Math.max(resistance + atr * 0.5, price + atr * 1.5).toFixed(4));
+
+  const riskAmount = Math.abs(entry - sl);
+
+  // TP seviyeleri: 1:1.5, 1:2.5, 1:4 risk/ödül
+  const tp1 = isLong
+    ? parseFloat(Math.min(entry + riskAmount * 1.5, bb.upper).toFixed(4))
+    : parseFloat(Math.max(entry - riskAmount * 1.5, bb.lower).toFixed(4));
+
+  const tp2 = isLong
+    ? parseFloat((entry + riskAmount * 2.5).toFixed(4))
+    : parseFloat((entry - riskAmount * 2.5).toFixed(4));
+
+  const tp3 = isLong
+    ? parseFloat(Math.max(entry + riskAmount * 4, resistance).toFixed(4))
+    : parseFloat(Math.min(entry - riskAmount * 4, support).toFixed(4));
+
+  const riskPct = parseFloat((Math.abs(entry - sl) / entry * 100).toFixed(2));
+  const rewardPct1 = parseFloat((Math.abs(tp1 - entry) / entry * 100).toFixed(2));
+  const rewardPct2 = parseFloat((Math.abs(tp2 - entry) / entry * 100).toFixed(2));
+  const rewardPct3 = parseFloat((Math.abs(tp3 - entry) / entry * 100).toFixed(2));
+
+  return { entry, sl, tp1, tp2, tp3, riskPct, rewardPct1, rewardPct2, rewardPct3, rr1: parseFloat((rewardPct1 / riskPct).toFixed(2)) };
+}
+
 function generateSignal(
   rsi: number,
   macd: { histogram: number },
@@ -130,10 +187,12 @@ export async function GET(request: NextRequest) {
 
     const { signal, strength, reasons } = generateSignal(rsi, macd, price, bb, support, resistance);
 
-    // Trend belirleme
     const ema20 = calcEMA(closes, 20);
     const ema50 = calcEMA(closes, 50);
     const trend = ema20[ema20.length - 1] > ema50[ema50.length - 1] ? "Yükseliş" : "Düşüş";
+
+    const atr = calcATR(highs, lows, closes);
+    const tradePlan = calcTradePlan(signal, price, atr, support, resistance, bb);
 
     return NextResponse.json({
       symbol,
@@ -161,6 +220,8 @@ export async function GET(request: NextRequest) {
         strength: parseFloat((strength * 100).toFixed(1)),
         reasons,
       },
+      tradePlan,
+      atr: parseFloat(atr.toFixed(4)),
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
