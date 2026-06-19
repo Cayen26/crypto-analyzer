@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import AnalysisPanel from "./components/AnalysisPanel";
 
 const TradingViewWidget = dynamic(() => import("./components/TradingViewWidget"), { ssr: false });
@@ -127,6 +128,12 @@ export default function Home() {
             }}>{iv.label}</button>
           ))}
         </div>
+
+        <Link href="/tarama" style={{
+          padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+          background: "rgba(139,92,246,0.15)", color: "#a78bfa",
+          border: "1px solid rgba(139,92,246,0.3)", textDecoration: "none",
+        }}>⚡ Tarayıcı</Link>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           {data && (
