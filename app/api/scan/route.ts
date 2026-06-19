@@ -12,8 +12,7 @@ const SCAN_SYMBOLS = [
   "JUPUSDT","ENAUSDT","TAOUSDT","NOTUSDT","EIGENUSDT","GOATUSDT","PNUTUSDT",
 ];
 
-function toCC(symbol: string) { return symbol.replace(/USDT$/, ""); }
-
+function toCC(s: string) { return s.replace(/USDT$/, ""); }
 function ccEndpoint(interval: string): { ep: string; agg: number } {
   if (interval === "1d")  return { ep: "histoday",    agg: 1  };
   if (interval === "4h")  return { ep: "histohour",   agg: 4  };
@@ -22,20 +21,23 @@ function ccEndpoint(interval: string): { ep: string; agg: number } {
 }
 
 async function fetchKlines(symbol: string, interval: string): Promise<Kline[] | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const fsym = toCC(symbol);
     const { ep, agg } = ccEndpoint(interval);
     const url = `https://min-api.cryptocompare.com/data/v2/${ep}?fsym=${fsym}&tsym=USD&limit=100&aggregate=${agg}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
     const json = await res.json();
     if (json.Response !== "Success") return null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return json.Data.Data.map((k: any) => ({
+    return json.Data.Data.map((k: any): Kline => ({
       time: k.time * 1000, open: k.open, high: k.high,
       low: k.low, close: k.close, volume: k.volumefrom,
     }));
   } catch { return null; }
+  finally { clearTimeout(timer); }
 }
 
 export async function GET(request: NextRequest) {
@@ -55,7 +57,8 @@ export async function GET(request: NextRequest) {
     results.push(...batch.filter(Boolean));
   }
 
-  const filtered = (results as NonNullable<ReturnType<typeof scoredScanAnalysis>>[])
+  type Item = NonNullable<ReturnType<typeof scoredScanAnalysis>>;
+  const filtered = (results as Item[])
     .filter(r => filter === "all" || r.signal === filter)
     .sort((a, b) => b.strength - a.strength);
 
